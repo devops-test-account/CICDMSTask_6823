@@ -1,0 +1,42 @@
+name: Build and Deploy .NET App
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0'
+
+      - name: Build Application
+        run: dotnet publish ./MSGateway.csproj -c Release -o ./publish
+
+  deploy:
+    runs-on: windows-latest
+    needs: build
+    steps:
+      - name: Enable RDP
+        uses: gbraad-actions/enable-remote-desktop@v1
+        with:
+          host: ${{ secrets.EC2_HOST }}           # Use GitHub Secrets for sensitive information
+          username: ${{ secrets.EC2_USERNAME }}    # Use GitHub Secrets for sensitive information
+          password: ${{ secrets.EC2_PASSWORD }}     # Use GitHub Secrets for sensitive information
+          script: |
+            powershell -Command "& {
+              # Check if the target directory exists, create it if it does not
+              if (!(Test-Path 'C:\inetpub\wwwroot\GatewayAPI')) { 
+                New-Item -Path 'C:\inetpub\wwwroot\GatewayAPI' -ItemType Directory -Verbose
+              }
+              # Copy files from the local runner to the target directory
+              # Assume that the publish directory is accessible
+              Copy-Item -Path 'C:\inetpub\wwwroot\*' -Destination 'C:\inetpub\wwwroot\GatewayAPI' -Recurse -Force -Verbose
+            }"
